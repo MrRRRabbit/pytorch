@@ -230,7 +230,7 @@ struct EnumHolder;
 }
 
 // Future
-struct C10_EXPORT ivalue::Future final : c10::intrusive_ptr_target {
+struct C10_EXPORT ivalue::Future : c10::intrusive_ptr_target {
  private:
   c10::intrusive_ptr<Future> intrusive_from_this() {
     c10::raw::intrusive_ptr::incref(this); // we are creating a new pointer
@@ -258,7 +258,7 @@ struct C10_EXPORT ivalue::Future final : c10::intrusive_ptr_target {
   /**
    * Wait on the future until it completes.
    */
-  void wait() {
+  virtual void wait() {
     std::unique_lock<std::mutex> lock(mutex_);
     while (!completed_) {
       finished_cv_.wait(lock);
@@ -268,7 +268,7 @@ struct C10_EXPORT ivalue::Future final : c10::intrusive_ptr_target {
   /**
    * Explicitly mark the future as completed with the output value.
    */
-  void markCompleted(IValue value) {
+  virtual void markCompleted(IValue value) {
     std::unique_lock<std::mutex> lock(mutex_);
     TORCH_CHECK(
         !completed(),
@@ -339,7 +339,7 @@ struct C10_EXPORT ivalue::Future final : c10::intrusive_ptr_target {
    * If the future has already completed,
    * this function will execute the callback immediately.
    */
-  void addCallback(std::function<void(void)> callback) {
+  virtual void addCallback(std::function<void(void)> callback) {
     std::unique_lock<std::mutex> lock(mutex_);
     if (completed()) {
       lock.unlock();
@@ -401,6 +401,12 @@ struct C10_EXPORT ivalue::Future final : c10::intrusive_ptr_target {
     return type_;
   }
 
+ protected:
+  mutable std::mutex mutex_;
+  std::atomic_bool completed_ = {false}; // is this future complete
+
+  IValue value_; // when finished the value
+
  private:
   void setErrorInternal(
       FutureError error,
@@ -419,11 +425,8 @@ struct C10_EXPORT ivalue::Future final : c10::intrusive_ptr_target {
     }
   }
 
-  mutable std::mutex mutex_;
-  std::atomic_bool completed_ = {false}; // is this future complete
   std::condition_variable finished_cv_;
 
-  IValue value_; // when finished the value
   TypePtr type_;
   std::vector<std::function<void(void)>> callbacks_;
   c10::optional<FutureError> error_;
